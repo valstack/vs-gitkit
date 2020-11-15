@@ -19,11 +19,12 @@ func ParseGitCommand(cmd string) (*GitCommand, error) {
 	if len(matches) == 0 {
 		return nil, fmt.Errorf("invalid git command")
 	}
+	path := strings.Split(strings.Split(strings.Split(matches[0][2], " ")[0], "&")[0], "|")[0]
 
 	result := &GitCommand{
 		Original: cmd,
 		Command:  matches[0][1],
-		Repo:     strings.Replace(matches[0][2], "/", "", 1),
+		Repo:     path,
 	}
 
 	return result, nil

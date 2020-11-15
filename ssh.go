@@ -35,9 +35,11 @@ type PublicKey struct {
 type SSH struct {
 	listener net.Listener
 
-	sshconfig           *ssh.ServerConfig
-	config              *Config
-	PublicKeyLookupFunc func(string) (*PublicKey, error)
+	sshconfig                      *ssh.ServerConfig
+	config                         *Config
+	IdentifyRepositoryLocationFunc func(string, string) (string, error)
+	PostChangeEvent                func(string, string, *GitCommand)
+	PublicKeyLookupFunc            func(string) (*PublicKey, error)
 }
 
 func NewSSH(config Config) *SSH {
@@ -136,8 +138,15 @@ func (s *SSH) handleConnection(keyID string, chans <-chan ssh.NewChannel) {
 						ch.Write([]byte("Invalid command.\r\n"))
 						return
 					}
+					repositoryPath, err := s.IdentifyRepositoryLocationFunc(keyID, gitcmd.Repo)
 
-					if !repoExists(filepath.Join(s.config.Dir, gitcmd.Repo)) && s.config.AutoCreate == true {
+					if err != nil {
+						log.Println("ssh: error parsing command:", err)
+						ch.Write([]byte("Invalid command.\r\n"))
+						return
+					}
+					gitcmd.Repo = strings.Replace(repositoryPath, s.config.Dir, "", 1)
+					if !repoExists(filepath.Join(repositoryPath)) && s.config.AutoCreate == true {
 						err := initRepo(gitcmd.Repo, s.config)
 						if err != nil {
 							logError("repo-init", err)
@@ -145,8 +154,8 @@ func (s *SSH) handleConnection(keyID string, chans <-chan ssh.NewChannel) {
 						}
 					}
 
-					cmd := exec.Command(gitcmd.Command, gitcmd.Repo)
-					cmd.Dir = s.config.Dir
+					cmd := exec.Command(gitcmd.Command, filepath.Base(repositoryPath))
+					cmd.Dir = filepath.Dir(repositoryPath)
 					cmd.Env = append(os.Environ(), "GITKIT_KEY="+keyID)
 					// cmd.Env = append(os.Environ(), "SSH_ORIGINAL_COMMAND="+cmdName)
 
@@ -181,6 +190,9 @@ func (s *SSH) handleConnection(keyID string, chans <-chan ssh.NewChannel) {
 					if err = cmd.Wait(); err != nil {
 						log.Printf("ssh: command failed: %v", err)
 						return
+					}
+					if s.PostChangeEvent != nil {
+						s.PostChangeEvent(keyID, repositoryPath, gitcmd)
 					}
 
 					ch.SendRequest("exit-status", false, []byte{0, 0, 0, 0})
@@ -364,14 +376,4 @@ func (s *SSH) Stop() error {
 	}()
 
 	return s.listener.Close()
-}
-
-// Address returns the network address of the listener. This is in
-// particular useful when binding to :0 to get a free port assigned by
-// the OS.
-func (s *SSH) Address() string {
-	if s.listener != nil {
-		return s.listener.Addr().String()
-	}
-	return ""
 }

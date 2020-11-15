@@ -54,8 +54,8 @@ func (r *Receiver) Handle(reader io.Reader) error {
 	if r.MasterOnly && hook.Ref != "refs/heads/master" {
 		return fmt.Errorf("cant push to non-master branch")
 	}
-
-	tmpDir := path.Join(r.TmpDir, uuid.NewV4().String())
+	id := uuid.NewV4()
+	tmpDir := path.Join(r.TmpDir, id.String())
 	if err := os.MkdirAll(tmpDir, 0774); err != nil {
 		return err
 	}
