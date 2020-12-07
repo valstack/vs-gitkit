@@ -38,7 +38,7 @@ type SSH struct {
 	sshconfig                      *ssh.ServerConfig
 	config                         *Config
 	IdentifyRepositoryLocationFunc func(string, string) (string, error)
-	PostChangeEvent                func(string, string, *GitCommand)
+	Env                            func() []string
 	PublicKeyLookupFunc            func(string) (*PublicKey, error)
 }
 
@@ -156,9 +156,7 @@ func (s *SSH) handleConnection(keyID string, chans <-chan ssh.NewChannel) {
 
 					cmd := exec.Command(gitcmd.Command, filepath.Base(repositoryPath))
 					cmd.Dir = filepath.Dir(repositoryPath)
-					cmd.Env = append(os.Environ(), "GITKIT_KEY="+keyID)
-					// cmd.Env = append(os.Environ(), "SSH_ORIGINAL_COMMAND="+cmdName)
-
+					cmd.Env = s.Env()
 					stdout, err := cmd.StdoutPipe()
 					if err != nil {
 						log.Printf("ssh: cant open stdout pipe: %v", err)
@@ -190,9 +188,6 @@ func (s *SSH) handleConnection(keyID string, chans <-chan ssh.NewChannel) {
 					if err = cmd.Wait(); err != nil {
 						log.Printf("ssh: command failed: %v", err)
 						return
-					}
-					if s.PostChangeEvent != nil {
-						s.PostChangeEvent(keyID, repositoryPath, gitcmd)
 					}
 
 					ch.SendRequest("exit-status", false, []byte{0, 0, 0, 0})

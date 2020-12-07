@@ -20,9 +20,11 @@ type service struct {
 }
 
 type Server struct {
-	config   Config
-	services []service
-	AuthFunc func(Credential, *Request) (bool, error)
+	config                 Config
+	services               []service
+	Env                    func() []string
+	FindRepositoryLocation func(*http.Request) (string, error)
+	AuthFunc               func(Credential, *Request) (bool, error)
 }
 
 type Request struct {
@@ -61,15 +63,17 @@ func (s *Server) findService(req *http.Request) (*service, string) {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	logInfo("request", r.Method+" "+r.Host+r.URL.String())
 
+	svc, _ := s.findService(r)
 	// Find the git subservice to handle the request
-	svc, repoUrlPath := s.findService(r)
-	if svc == nil {
+	repoUrlPath, e := s.FindRepositoryLocation(r)
+	if svc == nil || e != nil {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 
 	// Determine namespace and repo name from request path
 	repoNamespace, repoName := getNamespaceAndRepo(repoUrlPath)
+
 	if repoName == "" {
 		logError("auth", fmt.Errorf("no repo name provided"))
 		w.WriteHeader(http.StatusBadRequest)
@@ -140,7 +144,7 @@ func (s *Server) getInfoRefs(_ string, w http.ResponseWriter, r *Request) {
 		return
 	}
 
-	cmd, pipe := gitCommand(s.config.GitPath, subCommand(rpc), "--stateless-rpc", "--advertise-refs", r.RepoPath)
+	cmd, pipe := gitCommand(s.Env(), s.config.GitPath, subCommand(rpc), "--stateless-rpc", "--advertise-refs", r.RepoPath)
 	if err := cmd.Start(); err != nil {
 		fail500(w, context, err)
 		return
@@ -185,7 +189,7 @@ func (s *Server) postRPC(rpc string, w http.ResponseWriter, r *Request) {
 		}
 	}
 
-	cmd, pipe := gitCommand(s.config.GitPath, subCommand(rpc), "--stateless-rpc", r.RepoPath)
+	cmd, pipe := gitCommand(s.Env(), s.config.GitPath, subCommand(rpc), "--stateless-rpc", r.RepoPath)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		fail500(w, context, err)
@@ -241,10 +245,10 @@ func repoExists(p string) bool {
 	return err == nil
 }
 
-func gitCommand(name string, args ...string) (*exec.Cmd, io.Reader) {
+func gitCommand(env []string, name string, args ...string) (*exec.Cmd, io.Reader) {
 	cmd := exec.Command(name, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Env = os.Environ()
+	cmd.Env = env
 
 	r, _ := cmd.StdoutPipe()
 	cmd.Stderr = cmd.Stdout
