@@ -1,4 +1,4 @@
-// +build !windows
+// +build windows
 
 package gitkit
 
@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
-	"syscall"
 )
 
 var reSlashDedup = regexp.MustCompile(`\/{2,}`)
@@ -32,13 +31,13 @@ func cleanUpProcessGroup(cmd *exec.Cmd) {
 	if cmd == nil {
 		return
 	}
+	/*
+		process := cmd.Process
+		if process != nil && process.Pid > 0 {
+			syscall.Kill(-process.Pid, syscall.SIGTERM)
+		}
 
-	process := cmd.Process
-	if process != nil && process.Pid > 0 {
-		syscall.Kill(-process.Pid, syscall.SIGTERM)
-	}
-
-	go cmd.Wait()
+		go cmd.Wait()*/
 }
 
 func packLine(w io.Writer, s string) error {

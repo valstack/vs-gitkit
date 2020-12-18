@@ -1,4 +1,4 @@
-// +build !windows
+// +build windows
 
 package gitkit
 
@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path"
 	"strings"
-	"syscall"
 )
 
 type service struct {
@@ -249,7 +248,7 @@ func repoExists(p string) bool {
 
 func gitCommand(env []string, name string, args ...string) (*exec.Cmd, io.Reader) {
 	cmd := exec.Command(name, args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	//cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Env = env
 
 	r, _ := cmd.StdoutPipe()
